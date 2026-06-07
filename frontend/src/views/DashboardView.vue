@@ -37,7 +37,7 @@ async function loadData() {
 }
 
 function statusLabel(status) {
-  const map = { DRAFT:'起草', ASSIGNED:'已分配', COUNTERSIGNED:'会签完成', FINALIZED:'已定稿', APPROVED:'已审批', SIGNED:'已签订', REJECTED:'已拒绝', CANCELLED:'已取消' }
+  const map = { DRAFT:'待分配', ASSIGNED:'待会签', COUNTERSIGNED:'会签完成', FINALIZED:'已定稿', APPROVED:'已审批', SIGNED:'已签订', REJECTED:'已拒绝', CANCELLED:'已取消' }
   return map[status] || status
 }
 

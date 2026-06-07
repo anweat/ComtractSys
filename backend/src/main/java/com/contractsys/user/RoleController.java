@@ -4,6 +4,7 @@ import com.contractsys.auth.AuthService;
 import com.contractsys.auth.RequirePermission;
 import com.contractsys.common.ApiException;
 import com.contractsys.common.ApiResponse;
+import com.contractsys.log.OperationLogService;
 import com.contractsys.user.dto.AssignPermissionsRequest;
 import com.contractsys.user.dto.RoleRequest;
 import com.contractsys.user.dto.RoleUpdateRequest;
@@ -22,12 +23,14 @@ public class RoleController {
     private final RoleRepository roleRepository;
     private final PermissionRepository permissionRepository;
     private final AuthService authService;
+    private final OperationLogService operationLogService;
 
     public RoleController(RoleRepository roleRepository, PermissionRepository permissionRepository,
-                          AuthService authService) {
+                          AuthService authService, OperationLogService operationLogService) {
         this.roleRepository = roleRepository;
         this.permissionRepository = permissionRepository;
         this.authService = authService;
+        this.operationLogService = operationLogService;
     }
 
     @GetMapping
@@ -46,7 +49,9 @@ public class RoleController {
         role.setRoleCode(request.roleCode());
         role.setRoleName(request.roleName());
         role.setDescription(request.description());
-        return ApiResponse.ok("创建成功", RoleView.from(roleRepository.save(role)));
+        roleRepository.save(role);
+        operationLogService.log(authService.requireUser(), "创建角色", "角色编码: " + role.getRoleCode());
+        return ApiResponse.ok("创建成功", RoleView.from(role));
     }
 
     @PutMapping("/{id}")
@@ -59,6 +64,8 @@ public class RoleController {
         }
         role.setRoleName(request.roleName());
         role.setDescription(request.description());
+        roleRepository.save(role);
+        operationLogService.log(authService.requireUser(), "更新角色", "角色编码: " + role.getRoleCode());
         return ApiResponse.ok(RoleView.from(roleRepository.save(role)));
     }
 
@@ -70,6 +77,7 @@ public class RoleController {
             throw ApiException.conflict("系统内置角色不能删除");
         }
         roleRepository.delete(role);
+        operationLogService.log(authService.requireUser(), "删除角色", "角色编码: " + role.getRoleCode());
         return ApiResponse.ok(null);
     }
 
@@ -85,6 +93,8 @@ public class RoleController {
         if (request.permissionIds() != null) {
             request.permissionIds().forEach(permissionId -> permissionRepository.findById(permissionId).ifPresent(role.getPermissions()::add));
         }
-        return ApiResponse.ok(RoleView.from(roleRepository.save(role)));
+        roleRepository.save(role);
+        operationLogService.log(authService.requireUser(), "分配角色权限", "角色编码: " + role.getRoleCode());
+        return ApiResponse.ok(RoleView.from(role));
     }
 }

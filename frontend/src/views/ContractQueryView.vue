@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, FilePlus2, Eye, Pencil, Trash2, RefreshCcw } from 'lucide-vue-next'
+import { Search, Eye, RefreshCcw } from 'lucide-vue-next'
 import { api } from '../api'
 import { useAuthStore } from '../stores/auth'
 
@@ -25,6 +25,7 @@ const statusOptions = [
   { value: 'APPROVED', label: '已审批' },
   { value: 'SIGNED', label: '已签订' },
   { value: 'REJECTED', label: '已拒绝' },
+  { value: 'CANCELLED', label: '已取消' },
 ]
 
 function statusLabel(status) {
@@ -42,7 +43,7 @@ async function loadContracts() {
     const params = { page: page.value, size: pageSize }
     if (keyword.value) params.keyword = keyword.value
     if (statusFilter.value) params.status = statusFilter.value
-    const res = await api.get('/contracts', { params })
+    const res = await api.get('/contracts/query', { params })
     contracts.value = res.data.records
     total.value = res.data.total
   } catch (err) {
@@ -62,40 +63,24 @@ function goPage(p) {
   loadContracts()
 }
 
-function editContract(c) {
-  router.push({ path: `/contracts/${c.id}`, query: { edit: '1' } })
-}
-
-async function deleteContract(c) {
-  if (!confirm(`确认删除合同「${c.name}」？`)) return
-  try {
-    await api.delete(`/contracts/${c.id}`)
-    loadContracts()
-  } catch (err) {
-    error.value = err.message
-  }
-}
-
 onMounted(loadContracts)
 </script>
 
 <template>
   <div>
     <div class="section-title">
-      <h2>合同管理</h2>
-      <button v-if="hasPermission('contract:create')" class="primary" @click="router.push('/contracts/create')"><FilePlus2 :size="16" /> 起草合同</button>
-    </div>
-
-    <div class="search-bar">
-      <div class="input" style="max-width:260px">
-        <Search :size="16" />
-        <input v-model="keyword" placeholder="合同编号/名称" @keyup.enter="search" />
+      <h2>合同查询</h2>
+      <div class="actions">
+        <div class="input" style="max-width:260px">
+          <Search :size="16" />
+          <input v-model="keyword" placeholder="合同编号/名称/客户" @keyup.enter="search" />
+        </div>
+        <select v-model="statusFilter" @change="search" style="max-width:140px">
+          <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+        </select>
+        <button class="secondary" @click="search">查询</button>
+        <button class="icon" @click="loadContracts"><RefreshCcw :size="16" /></button>
       </div>
-      <select v-model="statusFilter" @change="search" style="max-width:140px">
-        <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-      </select>
-      <button class="secondary" @click="search">查询</button>
-      <button class="icon" @click="loadContracts"><RefreshCcw :size="16" /></button>
     </div>
 
     <p v-if="error" class="error">{{ error }}</p>
@@ -114,8 +99,6 @@ onMounted(loadContracts)
             <td>{{ c.drafterName }}</td>
             <td class="row-actions">
               <button @click="router.push(`/contracts/${c.id}`)"><Eye :size="14" /> 详情</button>
-              <button v-if="hasPermission('contract:update') && (c.status === 'DRAFT' || c.status === 'REJECTED')" @click="editContract(c)"><Pencil :size="14" /> 编辑</button>
-              <button v-if="hasPermission('contract:delete') && (c.status === 'DRAFT' || c.status === 'CANCELLED')" @click="deleteContract(c)"><Trash2 :size="14" /> 删除</button>
             </td>
           </tr>
           <tr v-if="!loading && contracts.length === 0"><td colspan="6" class="muted" style="text-align:center">暂无数据</td></tr>

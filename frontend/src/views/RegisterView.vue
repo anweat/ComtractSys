@@ -11,6 +11,14 @@ const loading = ref(false)
 
 async function register() {
   error.value = ''
+  if (form.username.length < 3) {
+    error.value = '用户名长度不能少于3位'
+    return
+  }
+  if (form.password.length < 6) {
+    error.value = '密码长度不能少于6位'
+    return
+  }
   if (form.password !== form.confirmPassword) {
     error.value = '两次输入的密码不一致'
     return

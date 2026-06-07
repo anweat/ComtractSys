@@ -7,6 +7,7 @@ import com.contractsys.common.ApiException;
 import com.contractsys.common.ApiResponse;
 import com.contractsys.common.PageResponse;
 import com.contractsys.common.PageRequests;
+import com.contractsys.log.OperationLogService;
 import com.contractsys.user.dto.AssignRolesRequest;
 import com.contractsys.user.dto.UserCreateRequest;
 import com.contractsys.user.dto.UserStatusRequest;
@@ -27,13 +28,16 @@ public class UserController {
     private final RoleRepository roleRepository;
     private final AuthService authService;
     private final PasswordEncoder passwordEncoder;
+    private final OperationLogService operationLogService;
 
     public UserController(UserRepository userRepository, RoleRepository roleRepository,
-                          AuthService authService, PasswordEncoder passwordEncoder) {
+                          AuthService authService, PasswordEncoder passwordEncoder,
+                          OperationLogService operationLogService) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.authService = authService;
         this.passwordEncoder = passwordEncoder;
+        this.operationLogService = operationLogService;
     }
 
     @GetMapping
@@ -90,6 +94,7 @@ public class UserController {
             roleRepository.findByRoleCode("ROLE_NEW_USER").ifPresent(user.getRoles()::add);
         }
         userRepository.save(user);
+        operationLogService.log(authService.requireUser(), "创建用户", "用户名: " + user.getUsername());
         return ApiResponse.ok("创建成功", UserView.from(user));
     }
 
@@ -103,9 +108,13 @@ public class UserController {
         if (request.phone() != null) user.setPhone(request.phone());
         if (request.email() != null) user.setEmail(request.email());
         if (request.password() != null && !request.password().isBlank()) {
+            if (request.password().length() < 6) {
+                throw ApiException.badRequest("密码长度不能少于6位");
+            }
             user.setPasswordHash(passwordEncoder.encode(request.password()));
         }
         userRepository.save(user);
+        operationLogService.log(authService.requireUser(), "修改用户", "用户名: " + user.getUsername());
         return ApiResponse.ok("更新成功", UserView.from(user));
     }
 
@@ -120,6 +129,8 @@ public class UserController {
         }
         user.setStatus(request.status());
         userRepository.save(user);
+        operationLogService.log(authService.requireUser(), (request.status() == UserStatus.DISABLED ? "禁用" : "启用") + "用户",
+                "用户名: " + user.getUsername());
         return ApiResponse.ok(null);
     }
 
@@ -133,6 +144,7 @@ public class UserController {
         }
         user.setDeleted(true);
         userRepository.save(user);
+        operationLogService.log(authService.requireUser(), "删除用户", "用户名: " + user.getUsername());
         return ApiResponse.ok(null);
     }
 
@@ -150,6 +162,7 @@ public class UserController {
             request.roleIds().forEach(roleId -> roleRepository.findById(roleId).ifPresent(user.getRoles()::add));
         }
         userRepository.save(user);
+        operationLogService.log(authService.requireUser(), "分配用户角色", "用户名: " + user.getUsername());
         return ApiResponse.ok("角色分配成功", UserView.from(user));
     }
 }

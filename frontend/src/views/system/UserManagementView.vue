@@ -171,10 +171,10 @@ onMounted(() => { loadUsers(); loadRoles() })
     </div>
 
     <div v-if="showRoleForm" class="panel narrow" style="margin-bottom:18px">
-      <h2>分配角色</h2>
+      <h2>分配角色（单选）</h2>
       <div style="margin-top:14px;display:grid;gap:8px">
         <label v-for="r in roles" :key="r.id" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400">
-          <input type="checkbox" :checked="selectedRoleIds.includes(r.id)" @change="toggleRole(r.id)" />
+          <input type="radio" name="roleSelect" :value="r.id" :checked="selectedRoleIds.includes(r.id)" @change="selectedRoleIds = [r.id]" />
           <strong>{{ r.roleName }}</strong>
           <span class="muted">{{ r.roleCode }} - {{ r.description }}</span>
         </label>

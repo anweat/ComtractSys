@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { Plus, Pencil, Trash2, ShieldCheck } from 'lucide-vue-next'
 import { api } from '../../api'
 
@@ -13,6 +13,16 @@ const permRoleId = ref(null)
 const selectedPermIds = ref([])
 
 const form = reactive({ roleCode: '', roleName: '', description: '' })
+
+const groupedPermissions = computed(() => {
+  const groups = {}
+  for (const p of permissions.value) {
+    const module = p.module || 'OTHER'
+    if (!groups[module]) groups[module] = []
+    groups[module].push(p)
+  }
+  return groups
+})
 
 async function loadRoles() {
   error.value = ''
@@ -89,6 +99,20 @@ function togglePerm(permId) {
   else selectedPermIds.value.push(permId)
 }
 
+function selectAllInModule(module) {
+  const modulePerms = groupedPermissions.value[module]?.map(p => p.id) || []
+  for (const pid of modulePerms) {
+    if (!selectedPermIds.value.includes(pid)) {
+      selectedPermIds.value.push(pid)
+    }
+  }
+}
+
+function deselectAllInModule(module) {
+  const modulePerms = groupedPermissions.value[module]?.map(p => p.id) || []
+  selectedPermIds.value = selectedPermIds.value.filter(id => !modulePerms.includes(id))
+}
+
 async function savePerms() {
   try {
     await api.put(`/roles/${permRoleId.value}/permissions`, { permissionIds: selectedPermIds.value })
@@ -127,12 +151,21 @@ onMounted(() => { loadRoles(); loadPermissions() })
     <div v-if="showPermForm" class="panel narrow" style="margin-bottom:18px">
       <h2>分配权限</h2>
       <div style="margin-top:14px">
-        <div v-for="p in permissions" :key="p.id" style="margin-bottom:8px">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400">
-            <input type="checkbox" :checked="selectedPermIds.includes(p.id)" @change="togglePerm(p.id)" />
-            <strong>{{ p.permissionName }}</strong>
-            <span class="muted">{{ p.permissionCode }} · {{ p.module }}</span>
-          </label>
+        <div v-for="(perms, module) in groupedPermissions" :key="module" style="margin-bottom:16px;padding:10px;background:#f5f7fa;border-radius:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <strong style="font-size:14px">{{ module }}</strong>
+            <div style="gap:6px;display:flex">
+              <button class="secondary" style="font-size:11px;padding:2px 8px" @click="selectAllInModule(module)">全选</button>
+              <button class="secondary" style="font-size:11px;padding:2px 8px" @click="deselectAllInModule(module)">取消全选</button>
+            </div>
+          </div>
+          <div v-for="p in perms" :key="p.id" style="margin-bottom:4px">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400">
+              <input type="checkbox" :checked="selectedPermIds.includes(p.id)" @change="togglePerm(p.id)" />
+              <strong>{{ p.permissionName }}</strong>
+              <span class="muted">{{ p.permissionCode }}</span>
+            </label>
+          </div>
         </div>
       </div>
       <div class="row-actions" style="margin-top:14px">

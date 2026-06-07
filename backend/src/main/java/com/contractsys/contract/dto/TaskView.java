@@ -30,5 +30,12 @@ public record TaskView(
                 task.getOperatedAt()
         );
     }
+
+    /** 创建伪任务（待分配/待定稿） */
+    public static TaskView pseudo(Long contractId, String contractName, TaskType taskType,
+                                   String opinion, String assigneeName) {
+        return new TaskView(-contractId, contractId, contractName, taskType,
+                TaskStatus.PENDING, -1L, assigneeName, opinion, null);
+    }
 }
 

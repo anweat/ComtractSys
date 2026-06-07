@@ -7,10 +7,12 @@ import DashboardView from './views/DashboardView.vue'
 import ContractListView from './views/ContractListView.vue'
 import ContractCreateView from './views/ContractCreateView.vue'
 import ContractDetailView from './views/ContractDetailView.vue'
+import ContractQueryView from './views/ContractQueryView.vue'
 import CustomerListView from './views/CustomerListView.vue'
 import MyTasksView from './views/MyTasksView.vue'
 import UserManagementView from './views/system/UserManagementView.vue'
 import RoleManagementView from './views/system/RoleManagementView.vue'
+import PermissionManagementView from './views/system/PermissionManagementView.vue'
 import LogView from './views/system/LogView.vue'
 
 function hasAccess(required, permissions) {
@@ -32,11 +34,13 @@ const router = createRouter({
         { path: 'dashboard', component: DashboardView, meta: { title: '工作台' } },
         { path: 'contracts', component: ContractListView, meta: { title: '合同管理', permission: 'contract:view' } },
         { path: 'contracts/create', component: ContractCreateView, meta: { title: '起草合同', permission: 'contract:create' } },
+        { path: 'contracts/query', component: ContractQueryView, meta: { title: '合同查询', permission: 'log:view' } },
         { path: 'contracts/:id', component: ContractDetailView, meta: { title: '合同详情', permission: 'contract:view' } },
         { path: 'customers', component: CustomerListView, meta: { title: '客户管理', permission: 'customer:manage' } },
-        { path: 'tasks', component: MyTasksView, meta: { title: '我的待办', permission: ['contract:countersign', 'contract:approve', 'contract:sign', 'contract:update'] } },
+        { path: 'tasks', component: MyTasksView, meta: { title: '我的待办', permission: ['contract:countersign', 'contract:approve', 'contract:sign', 'contract:update', 'contract:assign'] } },
         { path: 'system/users', component: UserManagementView, meta: { title: '用户管理', permission: 'user:manage' } },
         { path: 'system/roles', component: RoleManagementView, meta: { title: '角色管理', permission: 'role:manage' } },
+        { path: 'system/permissions', component: PermissionManagementView, meta: { title: '权限管理', permission: 'permission:manage' } },
         { path: 'system/logs', component: LogView, meta: { title: '操作日志', permission: 'log:view' } },
       ]
     }
