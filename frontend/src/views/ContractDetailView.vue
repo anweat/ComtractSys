@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, UserCheck, Paperclip, Download, Trash2, Upload, RotateCcw } from 'lucide-vue-next'
+import { ArrowLeft, UserCheck, Paperclip, Download, Trash2, Upload, RotateCcw, XCircle } from 'lucide-vue-next'
 import { api } from '../api'
 import { useAuthStore } from '../stores/auth'
 
@@ -25,7 +25,7 @@ const assignForm = reactive({
 })
 
 function statusLabel(s) {
-  const map = { DRAFT:'待分配', ASSIGNED:'待会签', COUNTERSIGNED:'待定稿', FINALIZED:'待审批', APPROVED:'待签订', SIGNED:'已签订', REJECTED:'已拒绝' }
+  const map = { DRAFT:'待分配', ASSIGNED:'待会签', COUNTERSIGNED:'待定稿', FINALIZED:'待审批', APPROVED:'待签订', SIGNED:'已签订', REJECTED:'已拒绝', CANCELLED:'已取消' }
   return map[s] || s
 }
 
@@ -73,7 +73,15 @@ async function loadUsers() {
 
 async function assign() {
   try {
-    await api.post(`/contracts/${route.params.id}/assign`, assignForm)
+    if (!assignForm.countersignUserIds.length || !assignForm.approvalUserIds.length || !assignForm.signUserId) {
+      error.value = '请选择会签人员、审批人员和签订人员'
+      return
+    }
+    await api.post(`/contracts/${route.params.id}/assign`, {
+      countersignUserIds: assignForm.countersignUserIds,
+      approvalUserIds: assignForm.approvalUserIds,
+      signUserId: Number(assignForm.signUserId)
+    })
     success.value = '分配成功'
     await loadDetail()
     activeTab.value = 'info'
@@ -132,10 +140,21 @@ async function doSign() {
 }
 
 async function doResubmit() {
-  if (!confirm('确认重新提交审批？系统将清除旧的审批任务。')) return
+  if (!confirm('确认重新提交审批？所有审批人都需要重新审批，旧审批意见将被清空。')) return
   try {
     await api.post(`/contracts/${route.params.id}/resubmit`)
     success.value = '已重新提交审批'
+    await loadDetail()
+  } catch (err) {
+    error.value = err.message
+  }
+}
+
+async function doCancel() {
+  if (!confirm('确认取消该合同？取消后会关闭所有待办任务。')) return
+  try {
+    await api.post(`/contracts/${route.params.id}/cancel`)
+    success.value = '合同已取消'
     await loadDetail()
   } catch (err) {
     error.value = err.message
@@ -187,13 +206,40 @@ async function deleteAttachment(a) {
 }
 
 const assignableUsers = computed(() => users.value.filter(u => u.id !== contract.value?.drafterId))
-const pendingTask = (type) => tasks.value.some(t => t.taskType === type && t.taskStatus === 'PENDING' && t.assigneeId === auth.user?.id)
+const pendingTask = (type) => tasks.value.some(t => t.taskType === type && t.taskStatus === 'PENDING' && Number(t.assigneeId) === Number(auth.user?.id))
 const canAssignCurrent = computed(() => hasPermission('contract:assign') && contract.value?.status === 'DRAFT' && pendingTask('ASSIGN'))
 const canCountersignCurrent = computed(() => hasPermission('contract:countersign') && contract.value?.status === 'ASSIGNED' && pendingTask('COUNTERSIGN'))
 const canFinalizeCurrent = computed(() => hasPermission('contract:update') && contract.value?.status === 'COUNTERSIGNED' && pendingTask('FINALIZE'))
 const canApproveCurrent = computed(() => hasPermission('contract:approve') && contract.value?.status === 'FINALIZED' && pendingTask('APPROVAL'))
 const canSignCurrent = computed(() => hasPermission('contract:sign') && contract.value?.status === 'APPROVED' && pendingTask('SIGN'))
-const canResubmitCurrent = computed(() => hasPermission('contract:update') && contract.value?.status === 'REJECTED' && contract.value?.drafterId === auth.user?.id)
+const canResubmitCurrent = computed(() => hasPermission('contract:update') && contract.value?.status === 'REJECTED' && Number(contract.value?.drafterId) === Number(auth.user?.id))
+const canCancelCurrent = computed(() => hasPermission('contract:delete') && !['SIGNED', 'CANCELLED'].includes(contract.value?.status))
+const canModifyAttachments = computed(() => hasPermission('contract:update') && contract.value?.status !== 'CANCELLED')
+
+function userName(user) {
+  return user.displayName || user.username
+}
+
+function selectedUsers(field) {
+  return assignableUsers.value.filter(u => assignForm[field].includes(u.id))
+}
+
+function selectedSignUser() {
+  return assignableUsers.value.find(u => u.id === assignForm.signUserId)
+}
+
+function toggleUser(field, userId) {
+  const list = assignForm[field]
+  const idx = list.indexOf(userId)
+  if (idx >= 0) list.splice(idx, 1)
+  else list.push(userId)
+}
+
+function removeUser(field, userId) {
+  const list = assignForm[field]
+  const idx = list.indexOf(userId)
+  if (idx >= 0) list.splice(idx, 1)
+}
 
 onMounted(() => {
   if (route.query.tab) activeTab.value = route.query.tab
@@ -256,6 +302,9 @@ onMounted(() => {
           <button v-if="canApproveCurrent" @click="doApprove('REJECTED')">审批拒绝</button>
           <button v-if="canCountersignCurrent" @click="doCountersign">会签</button>
           <button v-if="canSignCurrent" @click="doSign">签订</button>
+          <button v-if="canCancelCurrent" @click="doCancel" style="color:#b42318">
+            <XCircle :size="14" /> 取消合同
+          </button>
         </div>
       </div>
 
@@ -281,7 +330,7 @@ onMounted(() => {
 
       <div v-if="activeTab === 'attachments'" class="tab-content">
         <div style="margin-bottom:14px">
-          <label v-if="hasPermission('contract:update')" class="secondary" style="display:inline-flex;cursor:pointer;min-height:38px;align-items:center;gap:8px;padding:0 14px;border-radius:6px;font-weight:700">
+          <label v-if="canModifyAttachments" class="secondary" style="display:inline-flex;cursor:pointer;min-height:38px;align-items:center;gap:8px;padding:0 14px;border-radius:6px;font-weight:700">
             <Upload :size="16" />
             {{ uploading ? '上传中...' : '选择文件' }}
             <input type="file" hidden accept=".doc,.docx,.jpg,.jpeg,.png,.bmp,.gif,.pdf" @change="handleUpload" :disabled="uploading" />
@@ -300,7 +349,7 @@ onMounted(() => {
               <td>{{ a.uploadedAt?.slice(0, 16) }}</td>
               <td class="row-actions">
                 <button @click="downloadAttachment(a)"><Download :size="14" /> 下载</button>
-                <button v-if="hasPermission('contract:update')" @click="deleteAttachment(a)"><Trash2 :size="14" /> 删除</button>
+                <button v-if="canModifyAttachments" @click="deleteAttachment(a)"><Trash2 :size="14" /> 删除</button>
               </td>
             </tr>
           </tbody>
@@ -308,23 +357,97 @@ onMounted(() => {
       </div>
 
       <div v-if="activeTab === 'assign' && canAssignCurrent" class="tab-content">
-        <div class="form-grid single">
-          <label>会签人员
-            <select v-model="assignForm.countersignUserIds" multiple style="min-height:100px">
-              <option v-for="u in assignableUsers" :key="u.id" :value="u.id">{{ u.displayName || u.username }}</option>
-            </select>
-          </label>
-          <label>审批人员
-            <select v-model="assignForm.approvalUserIds" multiple style="min-height:100px">
-              <option v-for="u in assignableUsers" :key="u.id" :value="u.id">{{ u.displayName || u.username }}</option>
-            </select>
-          </label>
-          <label>签订人员
-            <select v-model="assignForm.signUserId">
-              <option value="" disabled>请选择签订人员</option>
-              <option v-for="u in assignableUsers" :key="u.id" :value="u.id">{{ u.displayName || u.username }}</option>
-            </select>
-          </label>
+        <div class="assignment-panel">
+          <section class="assign-section">
+            <div class="assign-section-head">
+              <h3>会签人员</h3>
+              <span class="muted">可多选，全部完成后进入定稿</span>
+            </div>
+            <div class="tag-picker">
+              <div class="selected-tags">
+                <span v-if="selectedUsers('countersignUserIds').length === 0" class="tag-placeholder">请选择会签人员</span>
+                <button
+                  v-for="u in selectedUsers('countersignUserIds')"
+                  :key="'counter-tag-' + u.id"
+                  type="button"
+                  class="selected-tag"
+                  @click="removeUser('countersignUserIds', u.id)"
+                >
+                  {{ userName(u) }} <span aria-hidden="true">x</span>
+                </button>
+              </div>
+              <div class="checkbox-list">
+                <label v-for="u in assignableUsers" :key="'counter-' + u.id" class="check-option">
+                  <input
+                    type="checkbox"
+                    :checked="assignForm.countersignUserIds.includes(u.id)"
+                    @change="toggleUser('countersignUserIds', u.id)"
+                  />
+                  <span>{{ userName(u) }}</span>
+                  <small>{{ u.username }}</small>
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <section class="assign-section">
+            <div class="assign-section-head">
+              <h3>审批人员</h3>
+              <span class="muted">可多选，全部通过后进入签订</span>
+            </div>
+            <div class="tag-picker">
+              <div class="selected-tags">
+                <span v-if="selectedUsers('approvalUserIds').length === 0" class="tag-placeholder">请选择审批人员</span>
+                <button
+                  v-for="u in selectedUsers('approvalUserIds')"
+                  :key="'approval-tag-' + u.id"
+                  type="button"
+                  class="selected-tag"
+                  @click="removeUser('approvalUserIds', u.id)"
+                >
+                  {{ userName(u) }} <span aria-hidden="true">x</span>
+                </button>
+              </div>
+              <div class="checkbox-list">
+                <label v-for="u in assignableUsers" :key="'approval-' + u.id" class="check-option">
+                  <input
+                    type="checkbox"
+                    :checked="assignForm.approvalUserIds.includes(u.id)"
+                    @change="toggleUser('approvalUserIds', u.id)"
+                  />
+                  <span>{{ userName(u) }}</span>
+                  <small>{{ u.username }}</small>
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <section class="assign-section">
+            <div class="assign-section-head">
+              <h3>签订人员</h3>
+              <span class="muted">单选</span>
+            </div>
+            <div class="tag-picker">
+              <div class="selected-tags">
+                <span v-if="!selectedSignUser()" class="tag-placeholder">请选择签订人员</span>
+                <button v-else type="button" class="selected-tag" @click="assignForm.signUserId = ''">
+                  {{ userName(selectedSignUser()) }} <span aria-hidden="true">x</span>
+                </button>
+              </div>
+              <div class="checkbox-list">
+                <label v-for="u in assignableUsers" :key="'sign-' + u.id" class="check-option">
+                  <input
+                    type="radio"
+                    name="signUser"
+                    :checked="assignForm.signUserId === u.id"
+                    @change="assignForm.signUserId = u.id"
+                  />
+                  <span>{{ userName(u) }}</span>
+                  <small>{{ u.username }}</small>
+                </label>
+              </div>
+            </div>
+          </section>
         </div>
         <button class="primary" @click="assign">确认分配</button>
       </div>
